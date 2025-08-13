@@ -4,7 +4,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
 
--- Создаем окно GUI
+-- Создаем главное окно GUI
 local Window = OrionLib:MakeWindow({
     Name = "Rusaken GUI",
     HidePremium = false, 
@@ -13,8 +13,16 @@ local Window = OrionLib:MakeWindow({
     IntroEnabled = false
 })
 
-local Tab = Window:MakeTab({
+-- Вкладка для телепортации
+local TeleportTab = Window:MakeTab({
     Name = "Teleport",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Вкладка для визуальных эффектов
+local VisualTab = Window:MakeTab({
+    Name = "Visual",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
@@ -40,6 +48,8 @@ local speedEnabled = false
 local currentSpeed = 16  -- Стандартная скорость
 local autoFixEnabled = false
 local autoFixConnection = nil
+local highlightAllEnabled = false
+local highlightInstances = {}
 
 -- Функция для фикса генератора
 local function fixfullgen()
@@ -74,6 +84,38 @@ local function SetPlayerSpeed()
     end
 end
 
+-- Функция для добавления Highlight игроку
+local function AddHighlightToPlayer(player)
+    if not player.Character then return end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "PlayerHighlight"
+    highlight.FillColor = Color3.fromRGB(0, 255, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = player.Character
+    
+    highlightInstances[player] = highlight
+end
+
+-- Функция для удаления Highlight у игрока
+local function RemoveHighlightFromPlayer(player)
+    if highlightInstances[player] then
+        highlightInstances[player]:Destroy()
+        highlightInstances[player] = nil
+    end
+end
+
+-- Функция для управления Highlight всех игроков
+local function ManageAllHighlights()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if highlightAllEnabled then
+            AddHighlightToPlayer(player)
+        else
+            RemoveHighlightFromPlayer(player)
+        end
+    end
+end
+
 -- Обновляем позицию платформы
 function UpdateTeleportPartPosition()
     if not LocalPlayer.Character then return end
@@ -95,7 +137,7 @@ function TeleportToPlatform()
         end
         
         local targetCFrame = teleportPart.CFrame + Vector3.new(0, 5, 0)
-        local tweenInfo = TweenInfo.new(0.000000000000001, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         
         currentTweens.platform = TweenService:Create(humanoidRoot, tweenInfo, {CFrame = targetCFrame})
         currentTweens.platform:Play()
@@ -115,7 +157,7 @@ function SmoothTeleportToPlayer()
         end
         
         local teleportCFrame = targetRoot.CFrame * CFrame.new(0, 0.5, 2)
-        local tweenInfo = TweenInfo.new(0.000000000001, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
         
         currentTweens.player = TweenService:Create(localRoot, tweenInfo, {CFrame = teleportCFrame})
         currentTweens.player:Play()
@@ -152,8 +194,8 @@ function ManageAutoFix()
     end
 end
 
--- GUI элементы
-local PlayerDropdown = Tab:AddDropdown({
+-- GUI элементы для вкладки Teleport
+local PlayerDropdown = TeleportTab:AddDropdown({
     Name = "Выберите игрока",
     Default = "Не выбран",
     Options = {"Не выбран"},
@@ -165,7 +207,7 @@ local PlayerDropdown = Tab:AddDropdown({
     end    
 })
 
-Tab:AddButton({
+TeleportTab:AddButton({
     Name = "Телепорт к платформе",
     Callback = function()
         UpdateTeleportPartPosition()
@@ -173,7 +215,7 @@ Tab:AddButton({
     end    
 })
 
-Tab:AddToggle({
+TeleportTab:AddToggle({
     Name = "Авто-телепорт к игроку",
     Default = false,
     Callback = function(Value)
@@ -182,8 +224,7 @@ Tab:AddToggle({
     end    
 })
 
--- Заменяем Slider на TextBox
-Tab:AddTextbox({
+TeleportTab:AddTextbox({
     Name = "Скорость (BaseSpeed)",
     Default = "16",
     TextDisappear = false,
@@ -204,7 +245,7 @@ Tab:AddTextbox({
     end
 })
 
-Tab:AddToggle({
+TeleportTab:AddToggle({
     Name = "Изменить скорость",
     Default = false,
     Callback = function(Value)
@@ -220,13 +261,22 @@ Tab:AddToggle({
     end    
 })
 
--- Добавляем новый Toggle для автофикса
-Tab:AddToggle({
+TeleportTab:AddToggle({
     Name = "Авто-фикс генератора (при PuzzleUI)",
     Default = false,
     Callback = function(Value)
         autoFixEnabled = Value
         ManageAutoFix()
+    end    
+})
+
+-- GUI элементы для вкладки Visual
+VisualTab:AddToggle({
+    Name = "Highlight всех игроков",
+    Default = false,
+    Callback = function(Value)
+        highlightAllEnabled = Value
+        ManageAllHighlights()
     end    
 })
 
@@ -255,12 +305,35 @@ LocalPlayer.CharacterAdded:Connect(function(character)
     end
 end)
 
-Players.PlayerAdded:Connect(UpdatePlayerDropdown)
-Players.PlayerRemoving:Connect(UpdatePlayerDropdown)
+Players.PlayerAdded:Connect(function(player)
+    UpdatePlayerDropdown()
+    if highlightAllEnabled then
+        AddHighlightToPlayer(player)
+    end
+    
+    player.CharacterAdded:Connect(function(character)
+        if highlightAllEnabled then
+            AddHighlightToPlayer(player)
+        end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    UpdatePlayerDropdown()
+    RemoveHighlightFromPlayer(player)
+end)
 
 -- Инициализация
 UpdatePlayerDropdown()
 if LocalPlayer.Character then
     UpdateTeleportPartPosition()
 end
+
+-- Применяем Highlight к уже существующим игрокам при запуске
+if highlightAllEnabled then
+    for _, player in ipairs(Players:GetPlayers()) do
+        AddHighlightToPlayer(player)
+    end
+end
+
 OrionLib:Init()
