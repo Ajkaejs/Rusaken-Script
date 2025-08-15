@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService") -- Добавлен сервис телепортации
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
 
 -- Создаем главное окно GUI
@@ -50,6 +51,22 @@ local autoFixEnabled = false
 local autoFixConnection = nil
 local highlightAllEnabled = false
 local highlightInstances = {}
+
+-- Функция для телепортации в другой плейс
+local function TeleportToPlace()
+    local placeId = 84074827881236
+    local success, errorMsg = pcall(function()
+        TeleportService:Teleport(placeId, LocalPlayer)
+    end)
+    
+    if not success then
+        OrionLib:MakeNotification({
+            Name = "Ошибка телепортации",
+            Content = "Не удалось телепортироваться: "..tostring(errorMsg),
+            Time = 5
+        })
+    end
+end
 
 -- Функция для фикса генератора
 local function fixfullgen()
@@ -277,6 +294,19 @@ VisualTab:AddToggle({
     Callback = function(Value)
         highlightAllEnabled = Value
         ManageAllHighlights()
+    end    
+})
+
+-- Добавлена новая кнопка для телепортации в плейс
+VisualTab:AddButton({
+    Name = "Телепорт в плейс (84074827881236)",
+    Callback = function()
+        OrionLib:MakeNotification({
+            Name = "Телепортация",
+            Content = "Попытка телепортации в плейс 84074827881236...",
+            Time = 3
+        })
+        TeleportToPlace()
     end    
 })
 
