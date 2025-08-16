@@ -101,34 +101,97 @@ local function SetPlayerSpeed()
     end
 end
 
--- Функция для добавления Highlight игроку
+-- Функция для добавления Highlight игроку с отслеживанием изменений
 local function AddHighlightToPlayer(player)
     if not player.Character then return end
     
-    -- Проверяем, находится ли игрок в папке Killers
-    local isKiller = workspace.Players:FindFirstChild("Killers") and 
-                     workspace.Players.Killers:FindFirstChild(player.Name)
+    -- Удаляем старый Highlight если есть
+    if highlightInstances[player] then
+        if highlightInstances[player].killerConnection then
+            highlightInstances[player].killerConnection:Disconnect()
+        end
+        if highlightInstances[player].killerRemovedConnection then
+            highlightInstances[player].killerRemovedConnection:Disconnect()
+        end
+        if highlightInstances[player].characterConnection then
+            highlightInstances[player].characterConnection:Disconnect()
+        end
+        if highlightInstances[player].highlight and highlightInstances[player].highlight.Parent then
+            highlightInstances[player].highlight:Destroy()
+        end
+    end
     
     local highlight = Instance.new("Highlight")
     highlight.Name = "PlayerHighlight"
+    highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый по умолчанию
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = player.Character
     
-    -- Устанавливаем цвет в зависимости от статуса killer
-    if isKiller then
-        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Красный для киллеров
-        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-    else
-        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый для обычных игроков
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    -- Функция для обновления цвета
+    local function updateHighlightColor()
+        if not highlight or not highlight.Parent then return end
+        
+        local isKiller = workspace.Players:FindFirstChild("Killers") and 
+                         workspace.Players.Killers:FindFirstChild(player.Name)
+        
+        if isKiller then
+            highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Красный для киллеров
+            highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+        else
+            highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый для обычных
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        end
     end
     
-    highlight.Parent = player.Character
-    highlightInstances[player] = highlight
+    -- Проверяем сразу при создании
+    updateHighlightColor()
+    
+    -- Отслеживаем изменения в папке Killers
+    local killFolder = workspace.Players:FindFirstChild("Killers")
+    if killFolder then
+        local killerConnection = killFolder.ChildAdded:Connect(function(child)
+            if child.Name == player.Name then
+                updateHighlightColor()
+            end
+        end)
+        
+        local killerRemovedConnection = killFolder.ChildRemoved:Connect(function(child)
+            if child.Name == player.Name then
+                updateHighlightColor()
+            end
+        end)
+    end
+    
+    -- Отслеживаем появление нового персонажа
+    local characterConnection = player.CharacterAdded:Connect(function(character)
+        highlight.Parent = character
+        updateHighlightColor()
+    end)
+    
+    -- Сохраняем все соединения и хайлайт
+    highlightInstances[player] = {
+        highlight = highlight,
+        killerConnection = killerConnection,
+        killerRemovedConnection = killerRemovedConnection,
+        characterConnection = characterConnection
+    }
 end
 
 -- Функция для удаления Highlight у игрока
 local function RemoveHighlightFromPlayer(player)
     if highlightInstances[player] then
-        highlightInstances[player]:Destroy()
+        if highlightInstances[player].killerConnection then
+            highlightInstances[player].killerConnection:Disconnect()
+        end
+        if highlightInstances[player].killerRemovedConnection then
+            highlightInstances[player].killerRemovedConnection:Disconnect()
+        end
+        if highlightInstances[player].characterConnection then
+            highlightInstances[player].characterConnection:Disconnect()
+        end
+        if highlightInstances[player].highlight and highlightInstances[player].highlight.Parent then
+            highlightInstances[player].highlight:Destroy()
+        end
         highlightInstances[player] = nil
     end
 end
@@ -363,32 +426,6 @@ Players.PlayerRemoving:Connect(function(player)
     RemoveHighlightFromPlayer(player)
 end)
 
--- Проверка изменений статуса killer
-local function checkKillerStatus(player)
-    if not highlightAllEnabled then return end
-    
-    local killFolder = workspace.Players:FindFirstChild("Killers")
-    if killFolder then
-        killFolder.ChildAdded:Connect(function(child)
-            if child.Name == player.Name then
-                if highlightInstances[player] then
-                    highlightInstances[player].FillColor = Color3.fromRGB(255, 0, 0)
-                    highlightInstances[player].OutlineColor = Color3.fromRGB(255, 0, 0)
-                end
-            end
-        end)
-        
-        killFolder.ChildRemoved:Connect(function(child)
-            if child.Name == player.Name then
-                if highlightInstances[player] then
-                    highlightInstances[player].FillColor = Color3.fromRGB(0, 255, 0)
-                    highlightInstances[player].OutlineColor = Color3.fromRGB(255, 255, 255)
-                end
-            end
-        end)
-    end
-end
-
 -- Инициализация
 UpdatePlayerDropdown()
 if LocalPlayer.Character then
@@ -399,7 +436,6 @@ end
 if highlightAllEnabled then
     for _, player in ipairs(Players:GetPlayers()) do
         AddHighlightToPlayer(player)
-        checkKillerStatus(player)
     end
 end
 
