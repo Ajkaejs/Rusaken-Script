@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService") -- Добавлен сервис телепортации
+local TeleportService = game:GetService("TeleportService")
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
 
 -- Создаем главное окно GUI
@@ -46,7 +46,7 @@ local playerAutoTeleport = false
 local teleportConnections = {}
 local currentTweens = {}
 local speedEnabled = false
-local currentSpeed = 16  -- Стандартная скорость
+local currentSpeed = 16
 local autoFixEnabled = false
 local autoFixConnection = nil
 local highlightAllEnabled = false
@@ -105,12 +105,23 @@ end
 local function AddHighlightToPlayer(player)
     if not player.Character then return end
     
+    -- Проверяем, находится ли игрок в папке Killers
+    local isKiller = workspace.Players:FindFirstChild("Killers") and 
+                     workspace.Players.Killers:FindFirstChild(player.Name)
+    
     local highlight = Instance.new("Highlight")
     highlight.Name = "PlayerHighlight"
-    highlight.FillColor = Color3.fromRGB(0, 255, 0)
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.Parent = player.Character
     
+    -- Устанавливаем цвет в зависимости от статуса killer
+    if isKiller then
+        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Красный для киллеров
+        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+    else
+        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый для обычных игроков
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    end
+    
+    highlight.Parent = player.Character
     highlightInstances[player] = highlight
 end
 
@@ -154,7 +165,7 @@ function TeleportToPlatform()
         end
         
         local targetCFrame = teleportPart.CFrame + Vector3.new(0, 5, 0)
-        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local tweenInfo = TweenInfo.new(0.0000000000000001, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         
         currentTweens.platform = TweenService:Create(humanoidRoot, tweenInfo, {CFrame = targetCFrame})
         currentTweens.platform:Play()
@@ -174,7 +185,7 @@ function SmoothTeleportToPlayer()
         end
         
         local teleportCFrame = targetRoot.CFrame * CFrame.new(0, 0.5, 2)
-        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        local tweenInfo = TweenInfo.new(0.0000000000000001, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
         
         currentTweens.player = TweenService:Create(localRoot, tweenInfo, {CFrame = teleportCFrame})
         currentTweens.player:Play()
@@ -297,7 +308,6 @@ VisualTab:AddToggle({
     end    
 })
 
--- Добавлена новая кнопка для телепортации в плейс
 VisualTab:AddButton({
     Name = "Телепорт в плейс (84074827881236)",
     Callback = function()
@@ -353,6 +363,32 @@ Players.PlayerRemoving:Connect(function(player)
     RemoveHighlightFromPlayer(player)
 end)
 
+-- Проверка изменений статуса killer
+local function checkKillerStatus(player)
+    if not highlightAllEnabled then return end
+    
+    local killFolder = workspace.Players:FindFirstChild("Killers")
+    if killFolder then
+        killFolder.ChildAdded:Connect(function(child)
+            if child.Name == player.Name then
+                if highlightInstances[player] then
+                    highlightInstances[player].FillColor = Color3.fromRGB(255, 0, 0)
+                    highlightInstances[player].OutlineColor = Color3.fromRGB(255, 0, 0)
+                end
+            end
+        end)
+        
+        killFolder.ChildRemoved:Connect(function(child)
+            if child.Name == player.Name then
+                if highlightInstances[player] then
+                    highlightInstances[player].FillColor = Color3.fromRGB(0, 255, 0)
+                    highlightInstances[player].OutlineColor = Color3.fromRGB(255, 255, 255)
+                end
+            end
+        end)
+    end
+end
+
 -- Инициализация
 UpdatePlayerDropdown()
 if LocalPlayer.Character then
@@ -363,6 +399,7 @@ end
 if highlightAllEnabled then
     for _, player in ipairs(Players:GetPlayers()) do
         AddHighlightToPlayer(player)
+        checkKillerStatus(player)
     end
 end
 
