@@ -52,6 +52,25 @@ local autoFixConnection = nil
 local highlightAllEnabled = false
 local highlightInstances = {}
 
+-- Список специальных имен персонажей
+local SPECIAL_NAMES = {
+    "1x1x1x1",
+    "Noli",
+    "Jason",
+    "JohnDoe",
+    "c00lkidd"
+}
+
+-- Функция для проверки специального имени
+local function isSpecialName(character)
+    for _, name in ipairs(SPECIAL_NAMES) do
+        if character.Name == name then
+            return true
+        end
+    end
+    return false
+end
+
 -- Функция для телепортации в другой плейс
 local function TeleportToPlace()
     local placeId = 84074827881236
@@ -107,25 +126,11 @@ local function AddHighlightToPlayer(player)
     
     -- Удаляем старый Highlight если есть
     if highlightInstances[player] then
-        if highlightInstances[player].killerConnection then
-            highlightInstances[player].killerConnection:Disconnect()
-        end
-        if highlightInstances[player].killerRemovedConnection then
-            highlightInstances[player].killerRemovedConnection:Disconnect()
-        end
-        if highlightInstances[player].characterConnection then
-            highlightInstances[player].characterConnection:Disconnect()
-        end
-        if highlightInstances[player].highlight and highlightInstances[player].highlight.Parent then
-            highlightInstances[player].highlight:Destroy()
-        end
+        RemoveHighlightFromPlayer(player)
     end
     
     local highlight = Instance.new("Highlight")
     highlight.Name = "PlayerHighlight"
-    highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый по умолчанию
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.Parent = player.Character
     
     -- Функция для обновления цвета
     local function updateHighlightColor()
@@ -133,9 +138,10 @@ local function AddHighlightToPlayer(player)
         
         local isKiller = workspace.Players:FindFirstChild("Killers") and 
                          workspace.Players.Killers:FindFirstChild(player.Name)
+        local isSpecial = isSpecialName(player.Character)
         
-        if isKiller then
-            highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Красный для киллеров
+        if isKiller or isSpecial then
+            highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Красный для киллеров и особых имен
             highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
         else
             highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый для обычных
@@ -143,19 +149,25 @@ local function AddHighlightToPlayer(player)
         end
     end
     
+    highlight.Parent = player.Character
+    highlightInstances[player] = {
+        highlight = highlight,
+        connections = {}
+    }
+    
     -- Проверяем сразу при создании
     updateHighlightColor()
     
     -- Отслеживаем изменения в папке Killers
     local killFolder = workspace.Players:FindFirstChild("Killers")
     if killFolder then
-        local killerConnection = killFolder.ChildAdded:Connect(function(child)
+        highlightInstances[player].connections.killerAdded = killFolder.ChildAdded:Connect(function(child)
             if child.Name == player.Name then
                 updateHighlightColor()
             end
         end)
         
-        local killerRemovedConnection = killFolder.ChildRemoved:Connect(function(child)
+        highlightInstances[player].connections.killerRemoved = killFolder.ChildRemoved:Connect(function(child)
             if child.Name == player.Name then
                 updateHighlightColor()
             end
@@ -163,35 +175,31 @@ local function AddHighlightToPlayer(player)
     end
     
     -- Отслеживаем появление нового персонажа
-    local characterConnection = player.CharacterAdded:Connect(function(character)
+    highlightInstances[player].connections.characterAdded = player.CharacterAdded:Connect(function(character)
         highlight.Parent = character
+        task.wait(0.5) -- Даем время для загрузки персонажа
         updateHighlightColor()
     end)
     
-    -- Сохраняем все соединения и хайлайт
-    highlightInstances[player] = {
-        highlight = highlight,
-        killerConnection = killerConnection,
-        killerRemovedConnection = killerRemovedConnection,
-        characterConnection = characterConnection
-    }
+    -- Отслеживаем изменение имени персонажа
+    highlightInstances[player].connections.nameChanged = player.Character:GetPropertyChangedSignal("Name"):Connect(function()
+        updateHighlightColor()
+    end)
 end
 
 -- Функция для удаления Highlight у игрока
 local function RemoveHighlightFromPlayer(player)
     if highlightInstances[player] then
-        if highlightInstances[player].killerConnection then
-            highlightInstances[player].killerConnection:Disconnect()
+        -- Отключаем все соединения
+        for _, connection in pairs(highlightInstances[player].connections) do
+            connection:Disconnect()
         end
-        if highlightInstances[player].killerRemovedConnection then
-            highlightInstances[player].killerRemovedConnection:Disconnect()
-        end
-        if highlightInstances[player].characterConnection then
-            highlightInstances[player].characterConnection:Disconnect()
-        end
+        
+        -- Удаляем Highlight
         if highlightInstances[player].highlight and highlightInstances[player].highlight.Parent then
             highlightInstances[player].highlight:Destroy()
         end
+        
         highlightInstances[player] = nil
     end
 end
@@ -413,12 +421,6 @@ Players.PlayerAdded:Connect(function(player)
     if highlightAllEnabled then
         AddHighlightToPlayer(player)
     end
-    
-    player.CharacterAdded:Connect(function(character)
-        if highlightAllEnabled then
-            AddHighlightToPlayer(player)
-        end
-    end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
